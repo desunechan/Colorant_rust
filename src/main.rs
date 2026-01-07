@@ -68,6 +68,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🎮 Hold movement keys when aimbot is ON");
     println!("🎮 Press Ctrl+C to exit");
     println!("\n[SYSTEM] Starting monitoring loop...");
+
+    let mut engine_lock = engine.lock().await;
+    engine_lock.toggle(); // Enable for testing
+    
+    // Quick test capture
+    println!("\n🔍 Running color detection test...");
+    if let Err(e) = engine_lock.process_action(Action::Move).await {
+        println!("[TEST] Initial test failed: {}", e);
+    } else {
+        println!("[TEST] Initial test completed");
+    }
+    
+    engine_lock.toggle(); // Disable after test
     
     // Create hotkey manager
     //let hotkey_config = hotkey::HotkeyConfig::default();
@@ -87,6 +100,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
     */
+    
     
     // Main monitoring loop
     let mut last_f1_state = false;
@@ -133,37 +147,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }*/
         
         if engine_enabled {
-            // Process movement
+            // Process movement - DO NOT spawn new threads
             if should_move {
-                let engine_clone = Arc::clone(&engine);
-                tokio::spawn(async move {
-                    let mut engine = engine_clone.lock().await;
-                    if let Err(e) = engine.process_action(Action::Move).await {
-                        eprintln!("[ERROR] Move failed: {}", e);
-                    }
-                });
+                let mut engine_lock = engine.lock().await;
+                if let Err(e) = engine_lock.process_action(Action::Move).await {
+                    eprintln!("[ERROR] Move failed: {}", e);
+                }
             }
             
             // Process Alt click
             if alt_pressed {
-                let engine_clone = Arc::clone(&engine);
-                tokio::spawn(async move {
-                    let mut engine = engine_clone.lock().await;
-                    if let Err(e) = engine.process_action(Action::Click).await {
-                        eprintln!("[ERROR] Click failed: {}", e);
-                    }
-                });
+                let mut engine_lock = engine.lock().await;
+                if let Err(e) = engine_lock.process_action(Action::Click).await {
+                    eprintln!("[ERROR] Click failed: {}", e);
+                }
             }
             
             // Process F5 flick
             if f5_pressed && !last_f5_state {
-                let engine_clone = Arc::clone(&engine);
-                tokio::spawn(async move {
-                    let mut engine = engine_clone.lock().await;
-                    if let Err(e) = engine.process_action(Action::Flick).await {
-                        eprintln!("[ERROR] Flick failed: {}", e);
-                    }
-                });
+                let mut engine_lock = engine.lock().await;
+                if let Err(e) = engine_lock.process_action(Action::Flick).await {
+                    eprintln!("[ERROR] Flick failed: {}", e);
+                }
             }
         }
         
