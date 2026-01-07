@@ -13,7 +13,7 @@ pub struct Config {
     pub ingame_sensitivity: f32,
     pub move_speed: f32,
     pub flick_speed: f32,
-    pub lower_hsv: [u8; 3],  // H: 0-180, S: 0-255, V: 0-255 (OpenCV style)
+    pub lower_hsv: [u8; 3],
     pub upper_hsv: [u8; 3],
 }
 
@@ -27,8 +27,8 @@ impl Default for Config {
             ingame_sensitivity: 0.23,
             move_speed: 0.435,
             flick_speed: 4.628,
-            // Python OpenCV HSV ranges for purple
-            lower_hsv: [140, 120, 180],  // H:140-160, S:120-200, V:180-255
+            // Python OpenCV HSV ranges for purple targets
+            lower_hsv: [140, 120, 180],
             upper_hsv: [160, 200, 255],
         }
     }
@@ -53,7 +53,6 @@ pub struct ColorantEngine {
     capture: Capture,
     mouse: ArduinoMouse,
     toggled: bool,
-    debug_mode: bool,
 }
 
 impl ColorantEngine {
@@ -78,7 +77,6 @@ impl ColorantEngine {
             capture,
             mouse,
             toggled: false,
-            debug_mode: true,  // Enable debug output
         };
         
         Ok(engine)
@@ -110,49 +108,43 @@ impl ColorantEngine {
         let frame = match self.capture.get_frame_blocking(Duration::from_millis(100)) {
             Some(frame) => frame,
             None => {
-                debug!("[DEBUG] No frame captured");
+                println!("[ERROR] No frame captured from screen");
                 return Ok(());
             }
         };
         
-        // DEBUG: Sample center pixel
-        if self.debug_mode {
-            let center_x = frame.width() / 2;
-            let center_y = frame.height() / 2;
-            let pixel = frame.get_pixel(center_x, center_y);
-            let [r, g, b] = pixel.0;
-            let (h, s, v) = self.rgb_to_hsv_opencv(r, g, b);
-            println!("[DEBUG] Center pixel RGB: ({}, {}, {})", r, g, b);
-            println!("[DEBUG] Center pixel HSV: ({}, {}, {})", h, s, v);
-            println!("[DEBUG] Looking for H:{}-{} S:{}-{} V:{}-{}", 
-                self.config.lower_hsv[0], self.config.upper_hsv[0],
-                self.config.lower_hsv[1], self.config.upper_hsv[1],
-                self.config.lower_hsv[2], self.config.upper_hsv[2]);
-        }
+        // DEBUG: Print center pixel color
+        let center_x = frame.width() / 2;
+        let center_y = frame.height() / 2;
+        let pixel = frame.get_pixel(center_x, center_y);
+        let [r, g, b] = pixel.0;
+        let (h, s, v) = self.rgb_to_hsv_opencv(r, g, b);
+        println!("[DEBUG] Center pixel at ({}, {}):", center_x, center_y);
+        println!("        RGB: ({}, {}, {})", r, g, b);
+        println!("        HSV: ({}, {}, {})", h, s, v);
+        println!("[DEBUG] Looking for H:{}-{} S:{}-{} V:{}-{}", 
+            self.config.lower_hsv[0], self.config.upper_hsv[0],
+            self.config.lower_hsv[1], self.config.upper_hsv[1],
+            self.config.lower_hsv[2], self.config.upper_hsv[2]);
         
         // Find target using HSV color space
         let target_pos = self.find_target_hsv(&frame);
         
         match target_pos {
             Some((target_x, target_y)) => {
-                if self.debug_mode {
-                    println!("[DEBUG] Target found at: ({}, {})", target_x, target_y);
-                    println!("[DEBUG] FOV center: ({}, {})", 
-                        self.config.x_fov as i32 / 2, 
-                        self.config.y_fov as i32 / 2);
-                }
+                println!("[SUCCESS] Found target at ({}, {})", target_x, target_y);
+                println!("[INFO] FOV center: ({}, {})", 
+                    self.config.x_fov / 2, self.config.y_fov / 2);
                 
                 match action {
                     Action::Move => {
                         let x_diff = target_x as f32 - (self.config.x_fov as f32 / 2.0);
                         let y_diff = target_y as f32 - (self.config.y_fov as f32 / 2.0);
                         
-                        if self.debug_mode {
-                            println!("[DEBUG] Move diff: x={:.2}, y={:.2}", x_diff, y_diff);
-                            println!("[DEBUG] Move command: x={:.2}, y={:.2}", 
-                                x_diff * self.config.move_speed, 
-                                y_diff * self.config.move_speed);
-                        }
+                        println!("[MOVE] Difference: x={:.2}, y={:.2}", x_diff, y_diff);
+                        println!("[MOVE] Command: x={:.2}, y={:.2}", 
+                            x_diff * self.config.move_speed, 
+                            y_diff * self.config.move_speed);
                         
                         self.mouse.move_mouse(
                             x_diff * self.config.move_speed,
@@ -164,51 +156,58 @@ impl ColorantEngine {
                         let center_x_fov = self.config.x_fov as f32 / 2.0;
                         let center_y_fov = self.config.y_fov as f32 / 2.0;
                         
+                        println!("[CLICK] Checking if centered...");
+                        println!("        Target: ({}, {})", target_x, target_y);
+                        println!("        Center: ({:.1}, {:.1})", center_x_fov, center_y_fov);
+                        println!("        Diff: x={:.1}, y={:.1}", 
+                            target_x as f32 - center_x_fov,
+                            target_y as f32 - center_y_fov);
+                        
                         if (target_x as f32 - center_x_fov).abs() <= 4.0 &&
                            (target_y as f32 - center_y_fov).abs() <= 10.0 {
-                            println!("[DEBUG] Clicking - target centered");
+                            println!("[CLICK] Target centered - clicking!");
                             self.mouse.click().await?;
                         } else {
-                            println!("[DEBUG] Not clicking - target not centered");
+                            println!("[CLICK] Target not centered - no click");
                         }
                     }
                     
                     Action::Flick => {
-                        // FIXED: Remove the +2.0 offset that was causing issues
                         let x_diff = target_x as f32 - (self.config.x_fov as f32 / 2.0);
                         let y_diff = target_y as f32 - (self.config.y_fov as f32 / 2.0);
                         
                         let flick_x = x_diff * self.config.flick_speed;
                         let flick_y = y_diff * self.config.flick_speed;
                         
-                        if self.debug_mode {
-                            println!("[DEBUG] Flick diff: x={:.2}, y={:.2}", x_diff, y_diff);
-                            println!("[DEBUG] Flick command: x={:.2}, y={:.2}", flick_x, flick_y);
-                        }
+                        println!("[FLICK] Command: x={:.2}, y={:.2}", flick_x, flick_y);
                         
                         self.mouse.flick(flick_x, flick_y).await?;
                         self.mouse.click().await?;
-                        // FIXED: Correct flick back calculation
-                        self.mouse.flick(-flick_x * 0.5, -flick_y * 0.5).await?;
+                        self.mouse.flick(-flick_x, -flick_y).await?;
                     }
                 }
             }
             None => {
-                if self.debug_mode {
-                    println!("[DEBUG] No target found in FOV");
-                }
+                println!("[ERROR] No target found in the capture area!");
+                println!("[TIPS] 1. Check if purple target is visible");
+                println!("       2. Adjust HSV ranges if needed");
+                println!("       3. Verify screen capture is working");
             }
         }
         
         Ok(())
     }
     
+    // FIXED: Removed 'async' keyword - this is a synchronous function
     fn find_target_hsv(&self, frame: &image::RgbImage) -> Option<(i32, i32)> {
         let mut total_x = 0i64;
         let mut total_y = 0i64;
         let mut pixel_count = 0i64;
         
-        // Scan the frame for matching pixels
+        println!("[SCAN] Scanning {}x{} image for purple...", 
+            frame.width(), frame.height());
+        
+        // Scan the entire frame
         for y in 0..frame.height() {
             for x in 0..frame.width() {
                 let pixel = frame.get_pixel(x, y);
@@ -228,21 +227,22 @@ impl ColorantEngine {
             }
         }
         
-        if pixel_count > 50 {  // Minimum cluster size to avoid noise
+        if pixel_count > 0 {
             let avg_x = (total_x / pixel_count) as i32;
             let avg_y = (total_y / pixel_count) as i32;
             
-            if self.debug_mode {
-                println!("[DEBUG] Found {} purple pixels, center at ({}, {})", 
-                    pixel_count, avg_x, avg_y);
-            }
+            println!("[SCAN] Found {} purple pixels", pixel_count);
+            println!("[SCAN] Center of mass: ({}, {})", avg_x, avg_y);
             
             Some((avg_x, avg_y))
         } else {
+            println!("[SCAN] No purple pixels found at all!");
+            println!("[SCAN] Try adjusting HSV ranges or check color");
             None
         }
     }
     
+    // CORRECTED RGB to HSV conversion (OpenCV style)
     fn rgb_to_hsv_opencv(&self, r: u8, g: u8, b: u8) -> (u8, u8, u8) {
         let rf = r as f32 / 255.0;
         let gf = g as f32 / 255.0;
@@ -253,16 +253,16 @@ impl ColorantEngine {
         let delta = max - min;
         
         // Value (brightness)
-        let v = (max * 255.0) as u8;
+        let v = (max * 255.0).round() as u8;
         
         // Saturation
         let s = if max > 0.0 {
-            (delta / max * 255.0) as u8
+            (delta / max * 255.0).round() as u8
         } else {
             0
         };
         
-        // Hue (OpenCV: 0-180 range)
+        // Hue calculation (OpenCV: 0-180 range)
         let mut h = 0.0_f32;
         
         if delta > 0.0 {
@@ -274,13 +274,14 @@ impl ColorantEngine {
                 h = 60.0 * ((rf - gf) / delta + 4.0);
             }
             
+            // Normalize to 0-360
             if h < 0.0 {
                 h += 360.0;
             }
         }
         
-        // OpenCV uses 0-180 range for hue (divide by 2)
-        let h_out = (h / 2.0) as u8;
+        // OpenCV uses 0-180 range (divide by 2)
+        let h_out = (h / 2.0).round() as u8;
         
         (h_out, s, v)
     }
