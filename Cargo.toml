@@ -1,0 +1,46 @@
+[package]
+name = "colorant_rust"
+version = "2.0.0"
+edition = "2021"
+authors = ["Colorant System"]
+description = "High-performance Rust implementation of Colorant system"
+license = "MIT"
+readme = "README.md"
+
+[lib]
+name = "colorant_rust"
+path = "src/lib.rs"
+
+[[bin]]
+name = "colorant"
+path = "src/main.rs"
+
+[dependencies]
+rand = { version = "0.8", features = ["std_rng"] }
+tokio = { version = "1.0", features = ["full"] }
+windows = { version = "0.54", features = [
+    "Win32_Foundation",
+    "Win32_System_Console",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_Graphics_Gdi",  # ADDED - For screen capture
+    "Win32_System_Memory",
+    "Win32_Security",
+    "Win32_System_ProcessStatus",
+] }
+chrono = "0.4"
+serialport = "4.8"
+anyhow = "1.0"
+thiserror = "1.0"
+log = "0.4"
+env_logger = "0.10"
+parking_lot = "0.12"
+image = "0.24"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
