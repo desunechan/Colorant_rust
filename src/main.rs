@@ -69,10 +69,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🎮 Press Ctrl+C to exit");
     println!("\n[SYSTEM] Starting monitoring loop...");
 
-    let mut engine_lock = engine.lock().await;
-    engine_lock.toggle(); // Enable for testing
-    
     {
+        let mut engine_lock = engine.lock().await;
+        engine_lock.toggle(); // Enable for testing
         // Quick test capture
         println!("\n🔍 Running color detection test...");
         if let Err(e) = engine_lock.process_action(Action::Move).await {
