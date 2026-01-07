@@ -72,15 +72,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut engine_lock = engine.lock().await;
     engine_lock.toggle(); // Enable for testing
     
-    // Quick test capture
-    println!("\n🔍 Running color detection test...");
-    if let Err(e) = engine_lock.process_action(Action::Move).await {
-        println!("[TEST] Initial test failed: {}", e);
-    } else {
-        println!("[TEST] Initial test completed");
+    {
+        // Quick test capture
+        println!("\n🔍 Running color detection test...");
+        if let Err(e) = engine_lock.process_action(Action::Move).await {
+            println!("[TEST] Initial test failed: {}", e);
+        } else {
+            println!("[TEST] Initial test completed");
+        }
+        
+        engine_lock.toggle(); // Disable after test
     }
     
-    engine_lock.toggle(); // Disable after test
     
     // Create hotkey manager
     //let hotkey_config = hotkey::HotkeyConfig::default();
